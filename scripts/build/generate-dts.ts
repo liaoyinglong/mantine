@@ -2,8 +2,11 @@ import path from 'node:path';
 import { execa } from 'execa';
 import fs from 'fs-extra';
 
+
 export async function generateDts(packagePath: string) {
-  await execa('yarn', ['tsc', '--project', path.join(packagePath, 'tsconfig.build.json')]);
+  await execa('yarn', ['tsc', '--project', path.join(packagePath, 'tsconfig.build.json')], {
+    stdio: 'inherit',
+  });
 
   // Duplicate the type definitions for ESM
   await fs.copy(

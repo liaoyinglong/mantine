@@ -50,6 +50,7 @@ export async function generateCoreCSS() {
   const modules = files.filter((file) => file.endsWith('.module.css'));
   const global = files.find((file) => file.endsWith('global.css'))!;
 
+  await fs.ensureFile(getPath('apps/mantine.dev/src/.docgen/css-exports.json'));
   fs.writeJsonSync(
     getPath('apps/mantine.dev/src/.docgen/css-exports.json'),
     { modules: modules.map(transformFileName), global: transformFileName(global) },
