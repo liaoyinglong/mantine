@@ -13,7 +13,6 @@ import { getPath } from '../../utils/get-path';
 import { ROLLUP_EXCLUDE_USE_CLIENT } from './rollup-exclude-use-client';
 import { ROLLUP_EXTERNALS } from './rollup-externals';
 
-
 export async function createPackageConfig(packagePath: string): Promise<RollupOptions> {
   const packagesList = getPackagesList();
 

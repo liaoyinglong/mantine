@@ -10,7 +10,6 @@ import { getMantinePackagesList } from '../packages/get-packages-list';
 import { publishPackage } from '../publish/publish-package';
 import { getPath } from '../utils/get-path';
 import { createLogger } from '../utils/signale';
-import { openGithubRelease } from './open-github-release';
 import { setMantinePackagesVersion } from './set-mantine-packages-version';
 
 const logger = createLogger('release');
@@ -73,9 +72,9 @@ async function release() {
     getPath('scripts/plop/templates/package.json'),
   ]);
   await git.commit(`[release] Version: ${incrementedVersion}`);
-  await git.push();
+  //await git.push();
 
-  openGithubRelease(incrementedVersion);
+  //openGithubRelease(incrementedVersion);
 }
 
 release();
