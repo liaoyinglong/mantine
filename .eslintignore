@@ -9,3 +9,4 @@ public
 *.cjs
 *.mjs
 apps/mantine.dev/src/components/____test.component.tsx
+scripts-forked
