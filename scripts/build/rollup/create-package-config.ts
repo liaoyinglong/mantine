@@ -1,5 +1,6 @@
 import path from 'node:path';
 import alias, { Alias } from '@rollup/plugin-alias';
+import babel from '@rollup/plugin-babel';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 import replace from '@rollup/plugin-replace';
 import { generateScopedName } from 'hash-css-selector';
@@ -14,6 +15,8 @@ import { ROLLUP_EXCLUDE_USE_CLIENT } from './rollup-exclude-use-client';
 import { ROLLUP_EXTERNALS } from './rollup-externals';
 
 export async function createPackageConfig(packagePath: string): Promise<RollupOptions> {
+  const isForked = ['@mantine/core'].some((p) => packagePath.includes(p));
+
   const packagesList = getPackagesList();
 
   const aliasEntries: Alias[] = packagesList.map((pkg) => ({
@@ -23,17 +26,19 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
 
   const plugins = [
     nodeResolve({ extensions: ['.ts', '.tsx', '.js', '.jsx'] }),
-    esbuild({
-      sourceMap: false,
-      tsconfig: getPath('tsconfig.json'),
-    }),
+    isForked
+      ?
+      : esbuild({
+          sourceMap: false,
+          tsconfig: getPath('tsconfig.json'),
+        }),
     alias({ entries: aliasEntries }),
     replace({ preventAssignment: true }),
     postcss({
       extract: true,
       modules: { generateScopedName },
     }),
-    ['@mantine/core'].some((p) => packagePath.includes(p)) ? addCssImportInCore : undefined,
+    isForked ? addCssImportInCore({}) : undefined,
     banner((chunk) => {
       if (!ROLLUP_EXCLUDE_USE_CLIENT.includes(chunk.fileName)) {
         return "'use client';\n";
@@ -51,7 +56,7 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
         entryFileNames: '[name].mjs',
         dir: path.resolve(packagePath, 'esm'),
         preserveModules: true,
-        sourcemap: true,
+        //sourcemap: true,
       },
       // we don't need cjs for now
       //{
@@ -74,47 +79,56 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
  * 不过得让业务方编译 node_modules 下的文件
  */
 const moduleCssRegex = /\.module\.css\.mjs$/;
-const enableLayerCss = true;
-const addCssImportInCore: Plugin = {
-  name: 'add-css-import',
-  async renderChunk(code, chunk, options) {
-    if (moduleCssRegex.test(chunk.fileName)) {
-      // output dir: @mantine/core/esm
-      const outputDir = options.dir!;
+const addCssImportInCore = (params: { enableLayerCss?: boolean }): Plugin => {
+  const { enableLayerCss = false } = params;
 
-      // outputPath: @mantine/core/esm/button.module.css.mjs
-      const fileDir = path.dirname(path.resolve(outputDir, chunk.fileName));
+  return {
+    name: 'add-css-import',
+    async renderChunk(code, chunk, options) {
+      if (moduleCssRegex.test(chunk.fileName)) {
+        // output dir: @mantine/core/esm
+        const outputDir = options.dir!;
 
-      // css file name: button.css
-      const cssFileName = path
-        .basename(chunk.fileName)
-        .replace(moduleCssRegex, enableLayerCss ? '.layer.css' : '.css');
+        // outputPath: @mantine/core/esm/button.module.css.mjs
+        const fileDir = path.dirname(path.resolve(outputDir, chunk.fileName));
 
-      // cssPath: @mantine/core/styles/button.css
-      const stylesDir = path.resolve(outputDir, '../styles');
-      const cssPath = path.resolve(stylesDir, cssFileName);
-      const globalCssPath = path.resolve(
-        stylesDir,
-        enableLayerCss ? 'global.layer.css' : 'global.css'
-      );
-      // to get import path from outputPath to cssPath
-      const importPath = path.relative(fileDir, cssPath);
-      const globalImportPath = path.relative(fileDir, globalCssPath);
-      const magicString = new MagicString(code);
-      // 找到第一行的结束位置
-      magicString.prepend(
-        `\
-import "${globalImportPath}";
-import "${importPath}";
-`
-      );
-      const result = magicString.toString();
-      return {
-        code: result,
-        map: magicString.generateMap({ hires: true }),
-      };
-    }
+        // css file name: button.css
+        const cssFileName = path
+          .basename(chunk.fileName)
+          .replace(moduleCssRegex, enableLayerCss ? '.layer.css' : '.css');
 
-    return { code, map: null };
-  },
+        // cssPath: @mantine/core/styles/button.css
+        const stylesDir = path.resolve(outputDir, '../styles');
+        const cssPath = path.resolve(stylesDir, cssFileName);
+        const globalCssPath = path.resolve(
+          stylesDir,
+          enableLayerCss ? 'global.layer.css' : 'global.css'
+        );
+        // to get import path from outputPath to cssPath
+        const importPath = path.relative(fileDir, cssPath);
+        const globalImportPath = path.relative(fileDir, globalCssPath);
+        const magicString = new MagicString(code);
+        // 找到第一行的结束位置
+        magicString.prepend(
+          `\
+  import "${globalImportPath}";
+  import "${importPath}";
+  `
+        );
+        const result = magicString.toString();
+        return {
+          code: result,
+          map: magicString.generateMap({ hires: true }),
+        };
+      }
+
+      return { code, map: null };
+    },
+  };
 };
+
+
+const reactCompiler: Plugin = {
+  name: 'react-compiler',
+
+}
