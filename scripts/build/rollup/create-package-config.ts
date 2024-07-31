@@ -1,6 +1,6 @@
 import path from 'node:path';
+import { parseAsync, transformFromAstAsync } from '@babel/core';
 import alias, { Alias } from '@rollup/plugin-alias';
-import babel from '@rollup/plugin-babel';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 import replace from '@rollup/plugin-replace';
 import { generateScopedName } from 'hash-css-selector';
@@ -26,19 +26,19 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
 
   const plugins = [
     nodeResolve({ extensions: ['.ts', '.tsx', '.js', '.jsx'] }),
-    isForked
-      ?
-      : esbuild({
-          sourceMap: false,
-          tsconfig: getPath('tsconfig.json'),
-        }),
+    isForked ? reactCompiler : undefined,
+    esbuild({
+      sourceMap: false,
+      tsconfig: getPath('tsconfig.json'),
+    }),
     alias({ entries: aliasEntries }),
     replace({ preventAssignment: true }),
     postcss({
       extract: true,
       modules: { generateScopedName },
     }),
-    isForked ? addCssImportInCore({}) : undefined,
+    // 暂时禁用，没有办法保证 css 顺序
+    //isForked ? addCssImportInCore({}) : undefined,
     banner((chunk) => {
       if (!ROLLUP_EXCLUDE_USE_CLIENT.includes(chunk.fileName)) {
         return "'use client';\n";
@@ -79,6 +79,7 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
  * 不过得让业务方编译 node_modules 下的文件
  */
 const moduleCssRegex = /\.module\.css\.mjs$/;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const addCssImportInCore = (params: { enableLayerCss?: boolean }): Plugin => {
   const { enableLayerCss = false } = params;
 
@@ -127,8 +128,56 @@ const addCssImportInCore = (params: { enableLayerCss?: boolean }): Plugin => {
   };
 };
 
+// eslint-disable-next-line no-lone-blocks
+{
+  // 确保 react-compiler 不会判断成 dev 模式
+  // @see https://github.com/facebook/react/blob/f603426f917314561c4289734f39b972be3814af/compiler/packages/babel-plugin-react-compiler/src/Babel/BabelPlugin.ts#L33-L34
+  // @ts-ignore
+  globalThis.__DEV__ = false;
+  process.env.NODE_ENV = 'production';
+}
 
 const reactCompiler: Plugin = {
   name: 'react-compiler',
 
-}
+  async transform(code, id) {
+    if (!id.endsWith('.tsx')) {
+      return null;
+    }
+
+    // 这里需要用 ast-grep 来把代码转换成可以被 react-compiler 处理的代码
+    const ast = await parseAsync(code, {
+      filename: id,
+      plugins: [
+        [
+          '@babel/plugin-syntax-typescript',
+          {
+            isTSX: true,
+          },
+        ],
+      ],
+      sourceType: 'module',
+    });
+    if (!ast) {
+      throw new Error(`Unable to parse code for ${id}`);
+    }
+
+    const result = await transformFromAstAsync(ast, code, {
+      envName: 'production',
+      ast: false,
+      filename: id,
+      highlightCode: false,
+      retainLines: true,
+      plugins: [[require.resolve('babel-plugin-react-compiler'), {}]],
+      sourceType: 'module',
+      configFile: false,
+      babelrc: false,
+    });
+
+    if (!result) {
+      throw new Error(`Unable to transform code for ${id}`);
+    }
+
+    return result!.code;
+  },
+};

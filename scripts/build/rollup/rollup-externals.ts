@@ -11,6 +11,7 @@ export const ROLLUP_EXTERNALS = [
   'highlight.js/lib/languages/typescript',
   'react-is',
   'react/jsx-runtime',
+  'react/compiler-runtime',
   ...getPackagesList().map((pkg) => pkg.packageJson.name!),
   ...Object.keys({
     ...packageJson.devDependencies,
