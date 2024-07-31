@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { tsx } from '@ast-grep/napi';
 import { parseAsync, transformFromAstAsync } from '@babel/core';
 import alias, { Alias } from '@rollup/plugin-alias';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
@@ -59,14 +60,14 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
         //sourcemap: true,
       },
       // we don't need cjs for now
-      //{
-      //  format: 'cjs',
-      //  entryFileNames: '[name].cjs',
-      //  dir: path.resolve(packagePath, 'cjs'),
-      //  preserveModules: true,
-      //  sourcemap: true,
-      //  interop: 'auto',
-      //},
+      {
+        format: 'cjs',
+        entryFileNames: '[name].cjs',
+        dir: path.resolve(packagePath, 'cjs'),
+        preserveModules: true,
+        sourcemap: true,
+        interop: 'auto',
+      },
     ],
     external: ROLLUP_EXTERNALS,
     plugins,
@@ -140,12 +141,49 @@ const addCssImportInCore = (params: { enableLayerCss?: boolean }): Plugin => {
 const reactCompiler: Plugin = {
   name: 'react-compiler',
 
-  async transform(code, id) {
+  async transform(_code, id) {
     if (!id.endsWith('.tsx')) {
       return null;
     }
 
+    let code = _code;
+
     // 这里需要用 ast-grep 来把代码转换成可以被 react-compiler 处理的代码
+    {
+      const ast = tsx.parse(code);
+      const root = ast.root();
+
+      // 只需要转换以下
+      // 1.
+      //   input: const Comp = factory(()=>{})
+      //   output: const Impl = ()=>{}; const Comp = factory(Impl)
+      // 2.
+      //   input: const Comp = polymorphicFactory(()=>{})
+      //   output: const Impl = ()=>{}; const Comp = polymorphicFactory(Impl)
+      // 提取出来的 Impl 可以直接作为才能被 react-compiler 识别为 Component
+      const nodes = root.findAll('export const $COMP = $FACTORY<$T>($IMPL)');
+
+      const edits = nodes
+        .map((node) => {
+          if (node) {
+            const factory = node.getMatch('FACTORY')?.text();
+            if (factory === 'factory' || factory === 'polymorphicFactory') {
+              const comp = node.getMatch('COMP')?.text();
+              const impl = node.getMatch('IMPL')?.text();
+
+              const edit = node.replace(`\
+        const ${comp}Impl = ${impl}
+        export const ${comp} = ${factory}(${comp}Impl)`);
+              return edit;
+            }
+          }
+          return null;
+        })
+        .filter((v) => !!v);
+      const newSource = root.commitEdits(edits);
+      code = newSource;
+    }
+
     const ast = await parseAsync(code, {
       filename: id,
       plugins: [

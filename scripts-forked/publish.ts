@@ -37,6 +37,9 @@ await fs.ensureDir(temp);
     })) {
       await fs.remove(file);
     }
+
+    // 删除 cjs 文件如果有的话
+    await fs.remove(path.resolve(coreTempDir, 'cjs'));
   }
 
   // 更改 package.json 中的 名字
