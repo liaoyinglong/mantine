@@ -59,7 +59,7 @@
     "stylelint": "stylelint \"**/*.css\" --cache",
     "syncpack": "syncpack list-mismatches",
     "syncpack:format": "syncpack format",
-    "prettier:test": "prettier --check \"**/*.{ts,tsx,mdx,css}\"",
+    "prettier:test": "prettier --check \"**/*.{ts,tsx,mdx,css}\" --cache",
     "prettier:write": "prettier --write \"**/*.{ts,tsx,mdx,css}\""
   },
   "dependencies": {

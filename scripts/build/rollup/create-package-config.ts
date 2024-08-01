@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { tsx } from '@ast-grep/napi';
+import { tsx, type Edit } from '@ast-grep/napi';
 import { parseAsync, transformFromAstAsync } from '@babel/core';
 import alias, { Alias } from '@rollup/plugin-alias';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
@@ -10,13 +10,16 @@ import { Plugin, RollupOptions } from 'rollup';
 import banner from 'rollup-plugin-banner2';
 import esbuild from 'rollup-plugin-esbuild';
 import postcss from 'rollup-plugin-postcss';
+import { forkedList } from '../../../scripts-forked/forkedList';
 import { getPackagesList } from '../../packages/get-packages-list';
 import { getPath } from '../../utils/get-path';
 import { ROLLUP_EXCLUDE_USE_CLIENT } from './rollup-exclude-use-client';
 import { ROLLUP_EXTERNALS } from './rollup-externals';
 
 export async function createPackageConfig(packagePath: string): Promise<RollupOptions> {
-  const isForked = ['@mantine/core'].some((p) => packagePath.includes(p));
+  const enableReactCompiler =
+    forkedList.some((p) => packagePath.includes(`@mantine/${p}`)) &&
+    !process.env.DISABLE_REACT_COMPILER;
 
   const packagesList = getPackagesList();
 
@@ -27,7 +30,7 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
 
   const plugins = [
     nodeResolve({ extensions: ['.ts', '.tsx', '.js', '.jsx'] }),
-    isForked ? reactCompiler : undefined,
+    enableReactCompiler ? reactCompiler({ packagePath }) : undefined,
     esbuild({
       sourceMap: false,
       tsconfig: getPath('tsconfig.json'),
@@ -56,18 +59,19 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
         format: 'es',
         entryFileNames: '[name].mjs',
         dir: path.resolve(packagePath, 'esm'),
-        preserveModules: true,
+        // 是否打成单一个文件
+        //preserveModules: true,
         //sourcemap: true,
       },
       // we don't need cjs for now
-      {
-        format: 'cjs',
-        entryFileNames: '[name].cjs',
-        dir: path.resolve(packagePath, 'cjs'),
-        preserveModules: true,
-        sourcemap: true,
-        interop: 'auto',
-      },
+      //{
+      //  format: 'cjs',
+      //  entryFileNames: '[name].cjs',
+      //  dir: path.resolve(packagePath, 'cjs'),
+      //  preserveModules: true,
+      //  //sourcemap: true,
+      //  interop: 'auto',
+      //},
     ],
     external: ROLLUP_EXTERNALS,
     plugins,
@@ -138,84 +142,96 @@ const addCssImportInCore = (params: { enableLayerCss?: boolean }): Plugin => {
   process.env.NODE_ENV = 'production';
 }
 
-const reactCompiler: Plugin = {
-  name: 'react-compiler',
+const reactCompiler = (params: { packagePath: string }): Plugin => {
+  const shouldExtractComImpl = [
+    '@mantine/core',
+    '@mantine/charts',
+    '@mantine/notifications',
+    '@mantine/dates',
+  ].some((p) => params.packagePath.includes(p));
 
-  async transform(_code, id) {
-    if (!id.endsWith('.tsx')) {
-      return null;
-    }
+  const reg = /\.tsx?$/;
+  return {
+    name: 'react-compiler',
 
-    let code = _code;
+    async transform(_code, id) {
+      if (!reg.test(id)) {
+        return null;
+      }
 
-    // 这里需要用 ast-grep 来把代码转换成可以被 react-compiler 处理的代码
-    {
-      const ast = tsx.parse(code);
-      const root = ast.root();
+      let code = _code;
 
-      // 只需要转换以下
-      // 1.
-      //   input: const Comp = factory(()=>{})
-      //   output: const Impl = ()=>{}; const Comp = factory(Impl)
-      // 2.
-      //   input: const Comp = polymorphicFactory(()=>{})
-      //   output: const Impl = ()=>{}; const Comp = polymorphicFactory(Impl)
-      // 提取出来的 Impl 可以直接作为才能被 react-compiler 识别为 Component
-      const nodes = root.findAll('export const $COMP = $FACTORY<$T>($IMPL)');
+      // 这里需要用 ast-grep 来把代码转换成可以被 react-compiler 处理的代码
+      if (shouldExtractComImpl) {
+        const ast = tsx.parse(code);
+        const root = ast.root();
 
-      const edits = nodes
-        .map((node) => {
-          if (node) {
-            const factory = node.getMatch('FACTORY')?.text();
-            if (factory === 'factory' || factory === 'polymorphicFactory') {
-              const comp = node.getMatch('COMP')?.text();
-              const impl = node.getMatch('IMPL')?.text();
+        // 只需要转换以下
+        // 1.
+        //   input: const Comp = factory(()=>{})
+        //   output: const Impl = ()=>{}; const Comp = factory(Impl)
+        // 2.
+        //   input: const Comp = polymorphicFactory(()=>{})
+        //   output: const Impl = ()=>{}; const Comp = polymorphicFactory(Impl)
+        // 提取出来的 Impl 可以直接作为才能被 react-compiler 识别为 Component
+        const nodes = root.findAll('export const $COMP = $FACTORY<$T>($IMPL)');
 
-              const edit = node.replace(`\
-        const ${comp}Impl = ${impl}
-        export const ${comp} = ${factory}(${comp}Impl)`);
-              return edit;
+        const edits = nodes
+          .map((node) => {
+            if (node) {
+              const factory = node.getMatch('FACTORY')?.text();
+              if (factory === 'factory' || factory === 'polymorphicFactory') {
+                const comp = node.getMatch('COMP')?.text();
+                const impl = node.getMatch('IMPL')?.text();
+
+                const edit = node.replace(`\
+          const ${comp}Impl = ${impl}
+          export const ${comp} = ${factory}(${comp}Impl)`);
+                return edit;
+              }
             }
-          }
-          return null;
-        })
-        .filter((v) => !!v);
-      const newSource = root.commitEdits(edits);
-      code = newSource;
-    }
+            return null;
+          })
+          .filter((v) => !!v) as Edit[];
+        const newSource = root.commitEdits(edits);
+        code = newSource;
+      }
 
-    const ast = await parseAsync(code, {
-      filename: id,
-      plugins: [
-        [
-          '@babel/plugin-syntax-typescript',
-          {
-            isTSX: true,
-          },
+      const ast = await parseAsync(code, {
+        filename: id,
+        plugins: [
+          [
+            '@babel/plugin-syntax-typescript',
+            {
+              isTSX: true,
+            },
+          ],
         ],
-      ],
-      sourceType: 'module',
-    });
-    if (!ast) {
-      throw new Error(`Unable to parse code for ${id}`);
-    }
+        sourceType: 'module',
+        sourceMaps: false,
+      });
+      if (!ast) {
+        throw new Error(`Unable to parse code for ${id}`);
+      }
 
-    const result = await transformFromAstAsync(ast, code, {
-      envName: 'production',
-      ast: false,
-      filename: id,
-      highlightCode: false,
-      retainLines: true,
-      plugins: [[require.resolve('babel-plugin-react-compiler'), {}]],
-      sourceType: 'module',
-      configFile: false,
-      babelrc: false,
-    });
+      const result = await transformFromAstAsync(ast, code, {
+        envName: 'production',
+        ast: false,
+        filename: id,
+        highlightCode: false,
+        retainLines: true,
+        plugins: [[require.resolve('babel-plugin-react-compiler'), {}]],
+        sourceType: 'module',
+        configFile: false,
+        babelrc: false,
+        sourceMaps: false,
+      });
 
-    if (!result) {
-      throw new Error(`Unable to transform code for ${id}`);
-    }
+      if (!result) {
+        throw new Error(`Unable to transform code for ${id}`);
+      }
 
-    return result!.code;
-  },
+      return result!.code;
+    },
+  };
 };

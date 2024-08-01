@@ -20,6 +20,13 @@ export async function buildPackage(_packageName: string) {
     logger.error(`Package ${formattedPackageName} does not exist`);
     process.exit(1);
   }
+  await Promise.all([
+    fs.emptyDir(path.join(packagePath, 'esm')),
+    fs.emptyDir(path.join(packagePath, 'cjs')),
+    //fs.emptyDir(path.join(packagePath, 'styles')),
+    //fs.emptyDir(path.join(packagePath, 'lib')),
+    //fs.remove(path.join(packagePath, 'tsconfig.build.tsbuildinfo')),
+  ]);
 
   logger.log(`Building package ${formattedPackageName}`);
 
