@@ -52,7 +52,7 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
     // 暂时禁用，没有办法保证 css 顺序
     //isForked ? addCssImportInCore({}) : undefined,
     banner((chunk) => {
-      if (!preserveModules || !ROLLUP_EXCLUDE_USE_CLIENT.includes(chunk.fileName)) {
+      if (!ROLLUP_EXCLUDE_USE_CLIENT.includes(chunk.fileName)) {
         return "'use client';\n";
       }
 
@@ -66,10 +66,19 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
       {
         format: 'es',
         entryFileNames: '[name].mjs',
+        dir: path.resolve(packagePath, 'lib'),
+        preserveModules: false,
+        //sourcemap: true,
+        plugins: [banner(() => "'use client';\n")],
+      },
+      {
+        format: 'es',
+        entryFileNames: '[name].mjs',
         dir: path.resolve(packagePath, 'esm'),
-        preserveModules,
+        preserveModules: true,
         //sourcemap: true,
       },
+
       // we don't need cjs for now
       //{
       //  format: 'cjs',
