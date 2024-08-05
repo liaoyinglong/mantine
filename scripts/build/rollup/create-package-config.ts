@@ -66,28 +66,20 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
       {
         format: 'es',
         entryFileNames: '[name].mjs',
-        dir: path.resolve(packagePath, 'lib'),
-        preserveModules: false,
-        //sourcemap: true,
-        plugins: [banner(() => "'use client';\n")],
-      },
-      {
-        format: 'es',
-        entryFileNames: '[name].mjs',
         dir: path.resolve(packagePath, 'esm'),
         preserveModules: true,
         //sourcemap: true,
       },
 
-      // we don't need cjs for now
-      //{
-      //  format: 'cjs',
-      //  entryFileNames: '[name].cjs',
-      //  dir: path.resolve(packagePath, 'cjs'),
-      //  preserveModules,
-      //  //sourcemap: true,
-      //  interop: 'auto',
-      //},
+      // cjs dir 目前是 bundle 好的文件
+      {
+        format: 'es',
+        entryFileNames: '[name].cjs',
+        dir: path.resolve(packagePath, 'cjs'),
+        preserveModules: false,
+        //sourcemap: true,
+        plugins: [banner(() => "'use client';\n")],
+      },
     ],
     external: ROLLUP_EXTERNALS,
     plugins,
