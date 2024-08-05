@@ -7,3 +7,5 @@ export const forkedList = [
   'hooks',
   'notifications',
 ];
+
+export const enableReactCompilerForkedList = forkedList;
