@@ -18,9 +18,11 @@ import { ROLLUP_EXTERNALS } from './rollup-externals';
 
 /**
  * 是否打成单一个文件
+ * false 时，打成单一文件
+ * true 时，打成多个文件
  * TODO：解决 rsc 入口之后可以放开
  */
-const preserveModules = true;
+const preserveModules = false;
 
 export async function createPackageConfig(packagePath: string): Promise<RollupOptions> {
   const enableReactCompiler =

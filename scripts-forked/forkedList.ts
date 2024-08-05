@@ -1,9 +1,9 @@
 export const forkedList = [
   //
-  //'charts',
+  'charts',
   'core',
-  //'dates',
-  //'form',
+  'dates',
+  'form',
   'hooks',
   'notifications',
 ];
