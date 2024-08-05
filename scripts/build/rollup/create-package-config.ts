@@ -16,6 +16,12 @@ import { getPath } from '../../utils/get-path';
 import { ROLLUP_EXCLUDE_USE_CLIENT } from './rollup-exclude-use-client';
 import { ROLLUP_EXTERNALS } from './rollup-externals';
 
+/**
+ * 是否打成单一个文件
+ * TODO：解决 rsc 入口之后可以放开
+ */
+const preserveModules = true;
+
 export async function createPackageConfig(packagePath: string): Promise<RollupOptions> {
   const enableReactCompiler =
     forkedList.some((p) => packagePath.includes(`@mantine/${p}`)) &&
@@ -44,7 +50,7 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
     // 暂时禁用，没有办法保证 css 顺序
     //isForked ? addCssImportInCore({}) : undefined,
     banner((chunk) => {
-      if (!ROLLUP_EXCLUDE_USE_CLIENT.includes(chunk.fileName)) {
+      if (!preserveModules || !ROLLUP_EXCLUDE_USE_CLIENT.includes(chunk.fileName)) {
         return "'use client';\n";
       }
 
@@ -59,8 +65,7 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
         format: 'es',
         entryFileNames: '[name].mjs',
         dir: path.resolve(packagePath, 'esm'),
-        // 是否打成单一个文件
-        //preserveModules: true,
+        preserveModules,
         //sourcemap: true,
       },
       // we don't need cjs for now
@@ -68,7 +73,7 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
       //  format: 'cjs',
       //  entryFileNames: '[name].cjs',
       //  dir: path.resolve(packagePath, 'cjs'),
-      //  preserveModules: true,
+      //  preserveModules,
       //  //sourcemap: true,
       //  interop: 'auto',
       //},
@@ -83,9 +88,9 @@ export async function createPackageConfig(packagePath: string): Promise<RollupOp
  * 目的是可以做 css 的按需加载
  * 不过得让业务方编译 node_modules 下的文件
  */
-const moduleCssRegex = /\.module\.css\.mjs$/;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const addCssImportInCore = (params: { enableLayerCss?: boolean }): Plugin => {
+  const moduleCssRegex = /\.module\.css\.mjs$/;
   const { enableLayerCss = false } = params;
 
   return {
