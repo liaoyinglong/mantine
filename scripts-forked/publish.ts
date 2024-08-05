@@ -55,8 +55,7 @@ await fs.emptyDir(temp);
         await fs.remove(file);
       }
 
-      // 删除 cjs 文件如果有的话
-      await fs.remove(path.resolve(pkgTempDir, 'cjs'));
+      //await fs.remove(path.resolve(pkgTempDir, 'cjs'));
       // 删除 styles 文件夹如果有的话，目前都是全量引入的 styles
       await fs.remove(path.resolve(pkgTempDir, 'styles'));
       await fs.remove(path.resolve(pkgTempDir, 'src'));
