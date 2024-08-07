@@ -78,8 +78,9 @@ export function useProviderColorScheme({
       }
     };
 
-    media.current?.addEventListener('change', listener);
-    return () => media.current?.removeEventListener('change', listener);
+    // maybe undefined in ios, sentry catched it
+    media.current?.addEventListener?.('change', listener);
+    return () => media.current?.removeEventListener?.('change', listener);
   }, [value, forceColorScheme]);
 
   return { colorScheme: colorSchemeValue, setColorScheme, clearColorScheme };
