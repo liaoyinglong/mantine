@@ -243,7 +243,7 @@ const reactCompiler = (params: { packagePath: string }): Plugin => {
         /**
          * _c 是 react compiler 的编译后的缓存函数
          * check _c(x) 中 x 的值
-         * 超过 100 就不要使用 react-compiler 的编译结果了
+         * 超过 MAX_C_CALL_COUNT 就不要使用 react-compiler 的编译结果了
          * 不然会导致 bundle 大小增加 && 运行时开销增加
          *  */
         const set = new Set<number>();
@@ -254,7 +254,8 @@ const reactCompiler = (params: { packagePath: string }): Plugin => {
         // 最大的放在最前面
         const arr = [...set].sort((a, b) => b - a);
         const max = arr[0] || 0;
-        if (max > 100) {
+
+        if (max > MAX_C_CALL_COUNT) {
           // eslint-disable-next-line no-console
           console.log(`发现_c(${max}) 丢弃 react-compiler 的结果：${id}`);
           // 丢弃 react-compiler 的结果
@@ -266,3 +267,4 @@ const reactCompiler = (params: { packagePath: string }): Plugin => {
     },
   };
 };
+const MAX_C_CALL_COUNT = 50;
